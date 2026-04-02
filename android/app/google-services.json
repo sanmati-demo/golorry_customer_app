@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1039403425798",
+    "project_id": "golorry-customer",
+    "storage_bucket": "golorry-customer.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1039403425798:android:b2715b18e8de6ee9872387",
+        "android_client_info": {
+          "package_name": "com.example.golorry_customer_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD2is8H74KSpVPuPSckz-jq5FI_n37FMvU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,33 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper functions ────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // ── users/{uid} ─────────────────────────────────
+    // A customer can read and write ONLY their own profile document.
+    match /users/{uid} {
+      allow read, write: if isOwner(uid);
+    }
+
+    // ── bookings/{bookingId} ────────────────────────
+    // A customer can:
+    //   READ   → only their own bookings (customerId == uid)
+    //   CREATE → only if they set themselves as customerId
+    //   UPDATE → only their own bookings (e.g. for cancellation)
+    //   DELETE → not allowed (bookings are permanent records)
+    match /bookings/{bookingId} {
+      allow read:   if isSignedIn() && resource.data.customerId == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.customerId == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.customerId == request.auth.uid;
+      allow delete: if false;
+    }
+  }
+}
