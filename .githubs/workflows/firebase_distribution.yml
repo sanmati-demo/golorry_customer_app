@@ -1,0 +1,131 @@
+name: Firebase App Distribution
+
+on:
+  workflow_run:
+    workflows: ["Flutter Build & Test"]
+    types:
+      - completed
+    branches:
+      - develop
+      - master
+
+jobs:
+  distribute_apk:
+    name: Distribute APK to Firebase
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download APK artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: customer-app-apk
+          path: build/app/outputs/apk/release/
+      
+      - name: Upload APK to Firebase
+        uses: wzieba/Firebase-Distribution-Github-Action@v1
+        with:
+          appId: ${{ secrets.FIREBASE_ANDROID_APP_ID }}
+          token: ${{ secrets.FIREBASE_CLI_TOKEN }}
+          file: build/app/outputs/apk/release/app-release.apk
+          releaseNotes: "Build #${{ github.run_number }} - Branch: ${{ github.ref_name }}"
+          groups: "beta-testers,qa-team"
+          serviceCredentialsFileContent: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+
+  distribute_ipa:
+    name: Distribute IPA to Firebase
+    runs-on: macos-latest
+    if: github.event.workflow_run.conclusion == 'success'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download IPA artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: customer-app-ipa
+          path: build/ios/
+      
+      - name: Upload IPA to Firebase
+        uses: wzieba/Firebase-Distribution-Github-Action@v1
+        with:
+          appId: ${{ secrets.FIREBASE_IOS_APP_ID }}
+          token: ${{ secrets.FIREBASE_CLI_TOKEN }}
+          file: build/ios/app.ipa
+          releaseNotes: "Build #${{ github.run_number }} - Branch: ${{ github.ref_name }}"
+          groups: "beta-testers,qa-team"
+          serviceCredentialsFileContent: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+
+  distribute_aab:
+    name: Distribute AAB to Play Store Internal Testing
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success' && github.ref == 'refs/heads/master'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download AAB artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: customer-app-aab
+          path: build/app/outputs/bundle/release/
+      
+      - name: Setup Google Play credentials
+        run: |
+          echo "${{ secrets.GOOGLE_PLAY_KEY_JSON }}" > ~/play-service-account-key.json
+      
+      - name: Upload to Play Store Internal Testing
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_KEY_JSON }}
+          packageName: com.golorry.customer
+          releaseFiles: 'build/app/outputs/bundle/release/app-release.aab'
+          track: internal
+          status: completed
+          whatsNewDirectory: whatsnew/
+          changesNotSentForReview: true
+
+  notify_slack:
+    name: Notify Slack
+    runs-on: ubuntu-latest
+    needs: [distribute_apk, distribute_ipa]
+    if: always()
+    steps:
+      - name: Slack Notification - Success
+        if: needs.distribute_apk.result == 'success' && needs.distribute_ipa.result == 'success'
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          payload: |
+            {
+              "text": "✅ Golorry App Distribution Successful",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "✅ *Build #${{ github.run_number }}* has been distributed successfully\n*Branch:* ${{ github.ref_name }}\n*Commit:* <${{ github.event.head_commit.url }}|${{ github.event.head_commit.message }}>"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Slack Notification - Failed
+        if: needs.distribute_apk.result == 'failure' || needs.distribute_ipa.result == 'failure'
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          payload: |
+            {
+              "text": "❌ Golorry App Distribution Failed",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "❌ *Build #${{ github.run_number }}* distribution failed\n*Branch:* ${{ github.ref_name }}\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Logs>"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
